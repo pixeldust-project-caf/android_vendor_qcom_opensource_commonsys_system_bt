@@ -4199,6 +4199,8 @@ static bt_status_t init_src(
     int max_a2dp_connections, int a2dp_multicast_state) {
   bt_status_t status = BT_STATUS_FAIL;
   BTIF_TRACE_EVENT("%s() with max conn = %d", __func__, max_a2dp_connections);
+
+#ifdef ENABLE_SPLIT_A2DP
   char value[PROPERTY_VALUE_MAX] = {'\0'};
 
   bt_split_a2dp_enabled = controller_get_interface()->supports_spilt_a2dp();
@@ -4209,6 +4211,7 @@ static bt_status_t init_src(
   tws_defaultmono_supported = (strcmp(value, "mono") == 0);
   BTIF_TRACE_DEBUG("default mono channel mode = %d",tws_defaultmono_supported);
   offload_enabled_codecs_config_ = offload_enabled_codecs;
+#endif /* ENABLE_SPLIT_A2DP */
 
 #if (TWS_STATE_ENABLED == TRUE)
   //osi_property_get("persist.vendor.btstack.twsplus.state", value, "false");
