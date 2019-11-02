@@ -288,7 +288,9 @@ uint16_t GATTS_AddService(tGATT_IF gatt_if, btgatt_db_element_t* service,
 
   if (elem.type == GATT_UUID_PRI_SERVICE) {
     Uuid* p_uuid = gatts_get_service_uuid(elem.p_db);
-    elem.sdp_handle = gatt_add_sdp_record(*p_uuid, elem.s_hdl, elem.e_hdl);
+    if (p_uuid) {
+      elem.sdp_handle = gatt_add_sdp_record(*p_uuid, elem.s_hdl, elem.e_hdl);
+    }
   } else {
     elem.sdp_handle = 0;
   }
@@ -709,6 +711,7 @@ tGATT_STATUS GATTC_Read(uint16_t conn_id, tGATT_READ_TYPE type,
   p_clcb->op_subtype = type;
   p_clcb->auth_req = p_read->by_handle.auth_req;
   p_clcb->counter = 0;
+  p_clcb->read_req_current_mtu = p_tcb->payload_size;
 
   switch (type) {
     case GATT_READ_BY_TYPE:

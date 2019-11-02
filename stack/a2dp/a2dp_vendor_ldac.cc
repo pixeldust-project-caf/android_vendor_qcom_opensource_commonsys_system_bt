@@ -314,6 +314,10 @@ bool A2DP_VendorCodecEqualsLdac(const uint8_t* p_codec_info_a,
 
 int A2DP_VendorGetBitRateLdac(const uint8_t* p_codec_info) {
   A2dpCodecConfig* current_codec = bta_av_get_a2dp_current_codec();
+  if (current_codec == nullptr) {
+    LOG_ERROR(LOG_TAG, "%s: Failed to get current a2dp codec", __func__)
+    return 0;
+  }
   btav_a2dp_codec_config_t codec_config_ = current_codec->getCodecConfig();
   int samplerate = A2DP_GetTrackSampleRate(p_codec_info);
   switch (codec_config_.codec_specific_1) {
@@ -904,9 +908,9 @@ bool A2dpCodecConfigLdac::setCodecConfig(const uint8_t* p_peer_codec_info,
          sizeof(ota_codec_peer_capability_));
   memcpy(saved_ota_codec_peer_config, ota_codec_peer_config_,
          sizeof(ota_codec_peer_config_));
-  print_ldac_codec_config(saved_ota_codec_config);
-  print_ldac_codec_config(saved_ota_codec_peer_capability);
-  print_ldac_codec_config(saved_ota_codec_peer_config);
+  //print_ldac_codec_config(saved_ota_codec_config);
+  //print_ldac_codec_config(saved_ota_codec_peer_capability);
+  //print_ldac_codec_config(saved_ota_codec_peer_config);
 
   tA2DP_STATUS status =
       A2DP_ParseInfoLdac(&sink_info_cie, p_peer_codec_info, is_capability);

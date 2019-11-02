@@ -1221,7 +1221,6 @@ void bta_ag_sco_event(tBTA_AG_SCB* p_scb, uint8_t event) {
           /* remove listening connection */
           bta_ag_remove_sco(p_scb, false);
 
-          if (p_scb == p_sco->p_curr_scb) p_sco->p_curr_scb = NULL;
 
 #if (TWS_AG_ENABLED == TRUE)
           if (p_scb == bta_ag_cb.main_sm_legacy_scb) {
@@ -1231,7 +1230,10 @@ void bta_ag_sco_event(tBTA_AG_SCB* p_scb, uint8_t event) {
           /* If last SCO instance then finish shutting down */
           if (!bta_ag_other_scb_open(p_scb)) {
             p_sco->state = BTA_AG_SCO_SHUTDOWN_ST;
+          } else if (p_scb == p_sco->p_curr_scb) {
+            p_sco->state = BTA_AG_SCO_LISTEN_ST;
           }
+
 #if (TWS_AG_ENABLED == TRUE)
           if (is_twsp_device(p_scb->peer_addr)) {
              if (p_scb == p_sco->p_curr_scb) {
@@ -1250,6 +1252,9 @@ void bta_ag_sco_event(tBTA_AG_SCB* p_scb, uint8_t event) {
              }
           }
 #endif
+          if (p_scb == p_sco->p_curr_scb) {
+            p_sco->p_curr_scb = NULL;
+          }
           break;
 
         case BTA_AG_SCO_CLOSE_E:
@@ -1278,7 +1283,8 @@ void bta_ag_sco_event(tBTA_AG_SCB* p_scb, uint8_t event) {
           if (is_twsp_device(p_scb->peer_addr) && !p_scb->rmt_sco_req) {
              tBTA_AG_SCB *other_scb = get_other_twsp_scb((p_scb->peer_addr));
              if (other_scb && twsp_sco_active(other_scb) == false &&
-                     get_twsp_state(other_scb) == TWSPLUS_EB_STATE_INEAR) {
+                     get_twsp_state(other_scb) != TWSPLUS_EB_STATE_OUT_OF_EAR &&
+                     get_twsp_state(other_scb) != TWSPLUS_EB_STATE_INCASE) {
                  dispatch_event_twsp_peer_device(p_scb, BTA_AG_SCO_OPEN_E);
              }
           }
@@ -1403,7 +1409,8 @@ void bta_ag_sco_event(tBTA_AG_SCB* p_scb, uint8_t event) {
           if (is_twsp_device(p_scb->peer_addr) && !p_scb->rmt_sco_req) {
               tBTA_AG_SCB *other_scb = get_other_twsp_scb((p_scb->peer_addr));
               if (other_scb && twsp_sco_active(other_scb) == false &&
-                      get_twsp_state(other_scb) == TWSPLUS_EB_STATE_INEAR) {
+                      get_twsp_state(other_scb) != TWSPLUS_EB_STATE_OUT_OF_EAR &&
+                      get_twsp_state(other_scb) != TWSPLUS_EB_STATE_INCASE) {
                   //trigger the secondary SCO connection for TWS
                   dispatch_event_twsp_peer_device(p_scb, BTA_AG_SCO_OPEN_E);
               }
@@ -1421,7 +1428,8 @@ void bta_ag_sco_event(tBTA_AG_SCB* p_scb, uint8_t event) {
           if (is_twsp_device(p_scb->peer_addr)&&!p_scb->rmt_sco_req) {
               tBTA_AG_SCB *other_scb = get_other_twsp_scb((p_scb->peer_addr));
               if (other_scb && twsp_sco_active(other_scb) == false &&
-                    get_twsp_state(other_scb) == TWSPLUS_EB_STATE_INEAR) {
+                      get_twsp_state(other_scb) != TWSPLUS_EB_STATE_OUT_OF_EAR &&
+                      get_twsp_state(other_scb) != TWSPLUS_EB_STATE_INCASE) {
                  dispatch_event_twsp_peer_device(p_scb, BTA_AG_SCO_OPEN_E);
               }
           }
