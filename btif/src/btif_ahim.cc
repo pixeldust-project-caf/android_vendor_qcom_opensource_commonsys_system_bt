@@ -68,10 +68,7 @@ IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE
 #include "audio_hal_interface/aidl/le_audio_software.h"
 #include <hardware/audio.h>
 #include <vector>
-#include <hardware/bt_pacs_client.h>
-#include <btif_vmcp.h>
-#include <aidl/vendor/qti/hardware/bluetooth/audio/LeAudioVendorConfiguration.h>
-#include <aidl/vendor/qti/hardware/bluetooth/audio/VendorCodecType.h>
+
 
 using bluetooth::audio::aidl::le_audio::LeAudioClientInterface;
 
@@ -86,15 +83,8 @@ using ::aidl::android::hardware::bluetooth::audio::LeAudioConfiguration;
 using SessionTypeAIDL = ::aidl::android::hardware::bluetooth::audio::SessionType;
 using ::aidl::android::hardware::bluetooth::audio::LeAudioCodecConfiguration;
 using ::aidl::android::hardware::bluetooth::audio::Lc3Configuration;
-using ::aidl::android::hardware::bluetooth::audio::CodecType;
-using ::aidl::vendor::qti::hardware::bluetooth::audio::LeAudioVendorConfiguration;
-using VendorCodecType =
-    ::aidl::vendor::qti::hardware::bluetooth::audio::VendorCodecType;
-using VendorConfiguration =
-    ::aidl::android::hardware::bluetooth::audio::LeAudioCodecConfiguration::VendorConfiguration;
 using ::aidl::android::hardware::bluetooth::audio::UnicastCapability;
 using vendor::qti::hardware::bluetooth_audio::V2_1::LC3ChannelMode;
-using bluetooth::bap::pacs::CodecIndex;
 //using ::bluetooth::audio::BitsPerSample;
 LeAudioClientInterface* leAudioClientInterface = nullptr;
 LeAudioClientInterface::Sink* unicastSinkClientInterface = nullptr;
@@ -495,145 +485,36 @@ LeAudioConfiguration fetch_offload_audio_config(int profile, int direction) {
   LC3ChannelMode ch_mode = btif_lc3_channel_mode(
       pclient_cbs[profile - 1]->get_channel_mode_cb(direction));
 
-  if (ch_mode == LC3ChannelMode::JOINT_STEREO ||
+  if( ch_mode == LC3ChannelMode::JOINT_STEREO ||
       ch_mode == LC3ChannelMode::MONO) {
     cis_count = 1;
   }
 
-  uint16_t type = pclient_cbs[profile - 1]->get_profile_status_cb();
   uint16_t frame_duration = pclient_cbs[profile - 1]->get_frame_length_cb(direction);
-  bool is_lc3q_supported = false;
-  CodecIndex codec_type = (CodecIndex) pclient_cbs[profile - 1]->get_codec_type(direction);
-  if (codec_type == CodecIndex::CODEC_INDEX_SOURCE_APTX_ADAPTIVE_LE) {
-    frame_duration =
-        ((pclient_cbs[profile - 1]->get_min_sup_frame_dur(direction)) / 4) * 1000;
-    LOG(ERROR) << __func__ << ": fetch frame duration "
-               << frame_duration << " from extended metadata";
+
+  // TODO to fill the right PD
+  Lc3Configuration lc3_config = {
+                    .pcmBitDepth = 24,
+                    .samplingFrequencyHz = btif_lc3_sample_rate(
+                          pclient_cbs[profile - 1]->get_sample_rate_cb(direction)),
+                    .frameDurationUs = (int) frame_duration,
+                    .octetsPerFrame =
+                         (int) pclient_cbs[profile - 1]->get_mtu_cb(0, direction),
+                    .blocksPerSdu = 1
+                   };
+
+  // TODO to fill the right PD
+  LeAudioConfiguration ucast_config = {
+     .peerDelayUs = 0,
+     .leAudioCodecConfig = LeAudioCodecConfiguration(lc3_config)};
+
+  for (int i = 0; i < cis_count; i++) {
+    ucast_config.streamMap.push_back({
+        .streamHandle = static_cast<char16_t>(i),
+        .audioChannelAllocation = (CHANNEL_FL + (i%2)),
+    });
   }
-  uint8_t encoder_version = 0;
-  if (1) {
-/*if (codec_type == CodecIndex::CODEC_INDEX_SOURCE_APTX_ADAPTIVE_LE ||
-      pclient_cbs[profile - 1]->get_is_codec_type_lc3q(direction)) {*/
-    VendorConfiguration vendor_config;
-    LeAudioVendorConfiguration le_vendor_config;
-
-    le_vendor_config.pcmBitDepth = 24;
-    le_vendor_config.samplingFrequencyHz = btif_lc3_sample_rate(
-                    pclient_cbs[profile - 1]->get_sample_rate_cb(direction));
-    le_vendor_config.frameDurationUs = (int) frame_duration;
-    le_vendor_config.octetsPerFrame =
-                    (int) pclient_cbs[profile - 1]->get_mtu_cb(0, direction);
-    le_vendor_config.blocksPerSdu = 1;
-
-    encoder_version = pclient_cbs[profile - 1]->get_codec_encoder_version(direction);
-    LOG(ERROR) << __func__ << ": codec negotiated encoder version" << encoder_version;
-    if (codec_type == CodecIndex::CODEC_INDEX_SOURCE_APTX_ADAPTIVE_LE) {
-      le_vendor_config.vendorCodecType = VendorCodecType::APTX_ADAPTIVE_R3;
-      LOG(ERROR) << __func__ << ": AptX LE metadata params are updated";
-      le_vendor_config.codecSpecificData =
-                      { 0x0F, //Vendor Metadata Length
-                        0xFF, //Vendor META data type
-                        0x0A, //Qtil ID
-                        0x00,
-                        0x0B, //Vendor Metadata length
-                        0x11, //AptX Adaptive LE Type
-                        pclient_cbs[profile - 1]->get_codec_encoder_version(direction),
-                        pclient_cbs[profile - 1]->get_codec_decoder_version(direction),
-                        pclient_cbs[profile - 1]->get_min_sup_frame_dur(direction),
-                        pclient_cbs[profile - 1]->get_feature_map(direction),
-                        0x00, 0x00, 0x00, 0x00, 0x00, 0x00 // RFU
-                      };
-    } else {
-      is_lc3q_supported = true;
-      le_vendor_config.vendorCodecType = VendorCodecType::LC3Q;
-      LOG(ERROR) << __func__ << ": Lc3q params are updated";
-      le_vendor_config.codecSpecificData =
-                      { 0x0F, //Vendor Metadata Length
-                        0xFF, //Vendor META data type
-                        0x0A, //Qtil ID
-                        0x00,
-                        0x0B, //Vendor Metadata length
-                        0x10, //LC3Q Type
-                        pclient_cbs[profile - 1]->get_codec_encoder_version(direction),
-                        pclient_cbs[profile - 1]->get_codec_decoder_version(direction),
-                        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 // RFU
-                      };
-    }
-
-    for (int i = 0; i < 16; i++) {
-      BTIF_TRACE_IMP("%s: AIDL, extension metadata [%d]: %d", __func__, i,
-                      le_vendor_config.codecSpecificData[i]);
-    }
-
-    vendor_config.extension.setParcelable(le_vendor_config);
-
-    // TODO to fill the right PD
-    LeAudioConfiguration ucast_config = {
-       .codecType = CodecType::VENDOR,
-       .peerDelayUs = 0,
-       .leAudioCodecConfig = LeAudioCodecConfiguration(vendor_config)
-    };
-
-    LOG(ERROR) << __func__ << ": type :" << type << "direction :" << direction;
-    bool is_mono_mic_channel_config = false;
-    if ((direction == TX_RX_BOTH_CONFIG) && (type == GCP_RX) && is_lc3q_supported) {
-      encoder_version = pclient_cbs[profile - 1]->get_codec_encoder_version(TX_ONLY_CONFIG);
-      LOG(ERROR) << __func__ << ": Encoder Version " << encoder_version;
-      if (encoder_version == LC3Q_CODEC_FT_CHANGE_SUPPORTED_VERSION) {
-        is_mono_mic_channel_config = true;
-        LOG(ERROR) << __func__ << ": Mono config channel set to true";
-      }
-    }
-
-    for (int i = 0; i < cis_count; i++) {
-      int channel = (CHANNEL_FL + (i%2));
-      if (is_mono_mic_channel_config) {
-        channel = CHANNEL_MONO;
-        LOG(ERROR) << __func__ << ": Set Mono config channel";
-      }
-      ucast_config.streamMap.push_back({
-          .streamHandle = static_cast<char16_t>(i),
-          .audioChannelAllocation = channel,
-      });
-      if (is_mono_mic_channel_config) {
-        LOG(ERROR) << __func__ << ": Set Mono config channel and break";
-        break;
-      }
-    }
-    /*for (int i = 0; i < cis_count; i++) {
-      ucast_config.streamMap.push_back({
-          .streamHandle = static_cast<char16_t>(i),
-          .audioChannelAllocation = (CHANNEL_FL + (i%2)),
-      });
-    }*/
-    return ucast_config;
-  } else {
-    // TODO to fill the right PD
-    Lc3Configuration lc3_config = {
-                  .pcmBitDepth = 24,
-                  .samplingFrequencyHz = btif_lc3_sample_rate(
-                   pclient_cbs[profile - 1]->get_sample_rate_cb(direction)),
-                  .frameDurationUs = (int) frame_duration,
-                  .octetsPerFrame =
-                  (int) pclient_cbs[profile - 1]->get_mtu_cb(0, direction),
-                  .blocksPerSdu = 1
-                };
-
-    // TODO to fill the right PD
-    LeAudioConfiguration ucast_config = {
-       .codecType = CodecType::LC3,
-       .peerDelayUs = 0,
-       .leAudioCodecConfig = LeAudioCodecConfiguration(lc3_config)
-    };
-
-    for (int i = 0; i < cis_count; i++) {
-      ucast_config.streamMap.push_back({
-          .streamHandle = static_cast<char16_t>(i),
-          .audioChannelAllocation = (CHANNEL_FL + (i%2)),
-      });
-    }
-    return ucast_config;
-  }
+  return ucast_config;
 }
 
 bool leAudio_get_selected_hal_codec_config(AudioConfigurationAIDL *lea_config,

@@ -1658,7 +1658,7 @@ bool a2dp_get_selected_hal_codec_config_2_1(CodecConfiguration_2_1* codec_config
       lc3Config.codecSpecific[5] = 0x10;  //LC3Q Type
       //0x01;  //LC3Q version
       lc3Config.codecSpecific[6] =
-          pclient_cbs[profile - 1]->get_codec_encoder_version(lc3Config.rxConfigSet);
+         pclient_cbs[profile - 1]->get_lc3q_ver(lc3Config.rxConfigSet);
     }
 
     lc3Config.defaultQlevel = 0;
@@ -1739,7 +1739,7 @@ bool a2dp_get_selected_hal_codec_config_2_1(CodecConfiguration_2_1* codec_config
         lc3Config.codecSpecific[5] = 0x10;  //LC3Q Type
         //0x01;  //LC3Q version
         lc3Config.codecSpecific[6] =
-            pclient_cbs[profile - 1]->get_codec_encoder_version(lc3Config.rxConfigSet);
+          pclient_cbs[profile - 1]->get_lc3q_ver(lc3Config.rxConfigSet);
       }
     }
     lc3Config.NumStreamIDGroup = cis_count;
