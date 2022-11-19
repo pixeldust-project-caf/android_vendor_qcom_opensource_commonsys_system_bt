@@ -76,6 +76,7 @@
 #include "device/include/interop.h"
 #include "stack/btm/btm_int_types.h"
 #include "btif/include/btif_storage.h"
+#include "btm_int.h"
 
 #if (BTA_HH_LE_INCLUDED == TRUE)
 #include "bta_hh_int.h"

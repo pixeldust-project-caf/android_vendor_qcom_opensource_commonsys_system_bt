@@ -108,6 +108,7 @@ bool aptxtws_sw = false;
 bool vbr_supported = false;
 bool aptxadaptiver2_1_supported = false;
 bool aptxadaptiver2_2_supported = false;
+bool a2dp_aptxadaptive_src_split_tx_supported = false;
 std::string offload_caps = "";
 static void init_btav_a2dp_codec_config(
     btav_a2dp_codec_config_t* codec_config, btav_a2dp_codec_index_t codec_index,
@@ -1656,6 +1657,7 @@ void A2DP_SetOffloadStatus(bool offload_status, const char *offload_cap,
   }
   if (add_on_features_size != 0 &&
       HCI_SPLIT_A2DP_SOURCE_Tx_Split_APTX_ADAPTIVE_SUPPORTED(add_on_features_list->as_array)) {
+    a2dp_aptxadaptive_src_split_tx_supported = true;
     BTIF_TRACE_DEBUG("%s: split TX is supported", __func__);
     property_get("persist.vendor.qcom.bluetooth.aptxadaptiver2_2_support", adaptive_value, "false");
     if (!(strcmp(adaptive_value,"true"))) {
@@ -1839,6 +1841,10 @@ bool A2DP_Get_Aptx_AdaptiveR2_1_Supported() {
 
 bool A2DP_Get_Aptx_AdaptiveR2_2_Supported() {
     return aptxadaptiver2_2_supported;
+}
+
+bool A2DP_Get_Source_Aptx_Adaptive_SplitTx_Supported() {
+    return a2dp_aptxadaptive_src_split_tx_supported;
 }
 
 bool A2DP_Get_AAC_VBR_Status(const RawAddress *remote_bdaddr) {
