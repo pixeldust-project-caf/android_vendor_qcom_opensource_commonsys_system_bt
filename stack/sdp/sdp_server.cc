@@ -159,6 +159,11 @@ static bool check_remote_map_version_104(RawAddress remote_addr);
 #define SDP_ENABLE_PTS_MAP  "vendor.bt.pts.map"
 #endif
 
+#ifndef SDP_ENABLE_PTS_AVRCP
+#define SDP_ENABLE_PTS_AVRCP "vendor.bt.pts.avrcp"
+#endif
+
+
 #define MAP_1_4 0x0104
 
 struct blacklist_entry
@@ -218,6 +223,17 @@ int sdp_get_stored_avrc_tg_version(RawAddress addr)
     uint16_t avrcp_features = 0;
     SDP_TRACE_DEBUG("%s target BD Addr: %s",\
              __func__, addr.ToString().c_str());
+    char pts_property[6];
+    int pts_avrcp_version;
+    osi_property_get(SDP_ENABLE_PTS_AVRCP, pts_property, "false");
+    if (!strncmp("true", pts_property, 4)) {
+      SDP_TRACE_DEBUG("%s pts running= %s, return AVRCP1.6", __func__, pts_property);
+      pts_avrcp_version = AVRC_REV_1_6;
+      pts_avrcp_version |= AVRCP_MASK_BRW_BIT;
+      pts_avrcp_version |= AVRCP_MASK_CA_BIT;
+      SDP_TRACE_DEBUG("%s: return AVRC version : 0x%x", __func__, pts_avrcp_version);
+      return pts_avrcp_version;
+    }
     bool feature = profile_feature_fetch(AVRCP_ID, AVRCP_COVERART_SUPPORT);
     if (btif_config_get_uint16(addr.ToString().c_str(), AV_REM_CTRL_VERSION_CONFIG_KEY,
                 (uint16_t*)&avrcp_version)) {
@@ -1463,7 +1479,7 @@ static uint16_t sdp_update_pbap_blacklist_len(tCONN_CB* p_ccb, tSDP_ATTR_SEQ* at
   bool is_pbap_101_blacklisted = is_device_blacklisted_for_pbap(p_ccb->device_address, false);
   bool is_pbap_102_blacklisted = is_device_blacklisted_for_pbap(p_ccb->device_address, true);
   bool running_pts = false;
-  char pts_property[6];
+  char pts_property[PROPERTY_VALUE_MAX] = {0};
   osi_property_get(SDP_ENABLE_PTS_PBAP, pts_property, "false");
   if (!strncmp("true", pts_property, 4)) {
     SDP_TRACE_DEBUG("%s pts running= %d", __func__, pts_property);
@@ -1558,7 +1574,7 @@ static tSDP_RECORD *sdp_upgrade_pse_record(tSDP_RECORD * p_rec,
   bool is_pbap_101_blacklisted = is_device_blacklisted_for_pbap(remote_address, false);
   bool is_pbap_102_blacklisted = is_device_blacklisted_for_pbap(remote_address, true);
   bool running_pts = false;
-  char pts_property[6];
+  char pts_property[PROPERTY_VALUE_MAX] = {0};
   osi_property_get(SDP_ENABLE_PTS_PBAP, pts_property, "false");
   if (!strncmp("true", pts_property, 4)) {
     SDP_TRACE_DEBUG("%s pts running= %d", __func__, pts_property);
@@ -1941,7 +1957,7 @@ static tSDP_RECORD *sdp_upgrade_mse_record(tSDP_RECORD * p_rec,
   /* Check if remote supports MAP 1.4 */
   is_map_104_supported = check_remote_map_version_104(remote_address);
   bool running_pts = false;
-  char pts_property[6];
+  char pts_property[PROPERTY_VALUE_MAX];
   osi_property_get(SDP_ENABLE_PTS_MAP, pts_property, "false");
   if (!strncmp("true", pts_property, 4)) {
     SDP_TRACE_DEBUG("%s pts running= %s", __func__, pts_property);

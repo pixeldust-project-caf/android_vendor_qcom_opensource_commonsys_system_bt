@@ -55,6 +55,7 @@ enum {
 };
 
 typedef uint8_t tBTM_STATUS;
+typedef uint8_t tHCI_STATUS;
 
 #if (BTA_HOST_INTERLEAVE_SEARCH == TRUE)
 typedef enum {
@@ -705,10 +706,11 @@ typedef struct {
 
 /* Structure returned with remote name  request */
 typedef struct {
-  uint16_t status;
+  tBTM_STATUS status;
   RawAddress bd_addr;
   uint16_t length;
   BD_NAME remote_bd_name;
+  tHCI_STATUS hci_status;
 } tBTM_REMOTE_DEV_NAME;
 
 typedef struct {
@@ -1261,13 +1263,13 @@ typedef uint8_t tBTM_LINK_KEY_TYPE;
 #define BTM_SEC_SERVICE_HIDD_INTR 53
 #define BTM_SEC_SERVICE_HEARING_AID_LEFT 54
 #define BTM_SEC_SERVICE_HEARING_AID_RIGHT 55
-#define BTM_SEC_SERVICE_EATT 57
+#define BTM_SEC_SERVICE_EATT 56
 
 /* Update these as services are added */
-#define BTM_SEC_SERVICE_FIRST_EMPTY 56
+#define BTM_SEC_SERVICE_FIRST_EMPTY 57
 
 #ifndef BTM_SEC_MAX_SERVICES
-#define BTM_SEC_MAX_SERVICES 80
+#define BTM_SEC_MAX_SERVICES 81
 #endif
 
 /*******************************************************************************

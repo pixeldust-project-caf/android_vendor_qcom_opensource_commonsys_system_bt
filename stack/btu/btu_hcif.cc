@@ -87,6 +87,9 @@
 #include "osi/include/osi.h"
 #include "device/include/device_iot_config.h"
 #include "stack_config.h"
+#ifdef DIR_FINDING_FEATURE
+#include "btm_ble_direction_finder_api.h"
+#endif
 
 using base::Location;
 
@@ -162,19 +165,23 @@ static void btu_hcif_ssr_evt(uint8_t* p, uint16_t evt_len);
 #endif /* BTM_SSR_INCLUDED == TRUE */
 
 static void btu_ble_ll_conn_complete_evt(uint8_t* p, uint16_t evt_len);
-static void btu_ble_read_remote_feat_evt(uint8_t* p);
+static void btu_ble_read_remote_feat_evt(uint8_t* p, uint8_t length);
 static void btu_ble_ll_conn_param_upd_evt(uint8_t* p, uint16_t evt_len);
 static void btu_ble_proc_ltk_req(uint8_t* p);
 static void btu_hcif_encryption_key_refresh_cmpl_evt(uint8_t* p);
 static void btu_ble_data_length_change_evt(uint8_t* p, uint16_t evt_len);
 #if (BLE_LLT_INCLUDED == TRUE)
-static void btu_ble_rc_param_req_evt(uint8_t* p);
+static void btu_ble_rc_param_req_evt(uint8_t* p, uint8_t len);
 #endif
 #if (BLE_PRIVACY_SPT == TRUE)
 static void btu_ble_proc_enhanced_conn_cmpl(uint8_t* p, uint16_t evt_len);
 #endif
 
 static void btu_ble_subrate_change_evt(uint8_t* p, uint16_t evt_len);
+#ifdef DIR_FINDING_FEATURE
+static void btm_le_conn_iq_report_evt(uint8_t* p, uint16_t evt_len);
+static void btm_le_cte_req_failed_evt(uint8_t* p, uint16_t evt_len);
+#endif
 
 static void do_in_hci_thread(const base::Location& from_here,
                              const base::Closure& task) {
@@ -381,10 +388,10 @@ void btu_hcif_process_event(UNUSED_ATTR uint8_t controller_id, BT_HDR* p_msg) {
           btu_ble_ll_conn_complete_evt(p, hci_evt_len);
           break;
         case HCI_BLE_LL_CONN_PARAM_UPD_EVT:
-          btu_ble_ll_conn_param_upd_evt(p, hci_evt_len);
+          btu_ble_ll_conn_param_upd_evt(p, ble_evt_len);
           break;
         case HCI_BLE_READ_REMOTE_FEAT_CMPL_EVT:
-          btu_ble_read_remote_feat_evt(p);
+          btu_ble_read_remote_feat_evt(p, ble_evt_len);
           break;
         case HCI_BLE_LTK_REQ_EVT: /* received only at slave device */
           btu_ble_proc_ltk_req(p);
@@ -396,7 +403,7 @@ void btu_hcif_process_event(UNUSED_ATTR uint8_t controller_id, BT_HDR* p_msg) {
 #endif
 #if (BLE_LLT_INCLUDED == TRUE)
         case HCI_BLE_RC_PARAM_REQ_EVT:
-          btu_ble_rc_param_req_evt(p);
+          btu_ble_rc_param_req_evt(p, ble_evt_len);
           break;
 #endif
         case HCI_BLE_DATA_LENGTH_CHANGE_EVT:
@@ -474,6 +481,17 @@ void btu_hcif_process_event(UNUSED_ATTR uint8_t controller_id, BT_HDR* p_msg) {
         case HCI_LE_SUBRATE_CHANGE_EVT:
           btu_ble_subrate_change_evt(p, hci_evt_len);
           break;
+
+#ifdef DIR_FINDING_FEATURE
+        case HCI_LE_CONN_IQ_REPORT_EVT:
+          btm_le_conn_iq_report_evt(p, hci_evt_len);
+          break;
+
+        case HCI_LE_CTE_REQ_FAILED_EVT:
+          btm_le_cte_req_failed_evt(p, hci_evt_len);
+          break;
+#endif //DIR_FINDING_FEATURE
+
 #ifdef VLOC_FEATURE
         default:
           LOG_DEBUG(LOG_TAG, "%s process vendor HCI events.", __func__);
@@ -1141,11 +1159,11 @@ static void btu_hcif_hdl_command_complete(uint16_t opcode, uint8_t* p,
       break;
 
     case HCI_GET_LINK_QUALITY:
-      btm_read_link_quality_complete(p);
+      btm_read_link_quality_complete(p, evt_len);
       break;
 
     case HCI_READ_RSSI:
-      btm_read_rssi_complete(p);
+      btm_read_rssi_complete(p, evt_len);
       break;
 
     case HCI_READ_FAILED_CONTACT_COUNTER:
@@ -1157,15 +1175,15 @@ static void btu_hcif_hdl_command_complete(uint16_t opcode, uint8_t* p,
       break;
 
     case HCI_READ_TRANSMIT_POWER_LEVEL:
-      btm_read_tx_power_complete(p, false);
+      btm_read_tx_power_complete(p, evt_len, false);
       break;
 
     case HCI_CREATE_CONNECTION_CANCEL:
-      btm_create_conn_cancel_complete(p);
+      btm_create_conn_cancel_complete(p, evt_len);
       break;
 
     case HCI_READ_LOCAL_OOB_DATA:
-      btm_read_local_oob_complete(p);
+      btm_read_local_oob_complete(p, evt_len);
       break;
 
     case HCI_READ_INQ_TX_POWER_LEVEL:
@@ -1175,15 +1193,15 @@ static void btu_hcif_hdl_command_complete(uint16_t opcode, uint8_t* p,
     /* BLE Commands sComplete*/
     case HCI_BLE_RAND:
     case HCI_BLE_ENCRYPT:
-      btm_ble_rand_enc_complete(p, opcode, (tBTM_RAND_ENC_CB*)p_cplt_cback);
+      btm_ble_rand_enc_complete(p, evt_len, opcode, (tBTM_RAND_ENC_CB*)p_cplt_cback);
       break;
 
     case HCI_BLE_READ_ADV_CHNL_TX_POWER:
-      btm_read_tx_power_complete(p, true);
+      btm_read_tx_power_complete(p, evt_len, true);
       break;
 
     case HCI_BLE_WRITE_ADV_ENABLE:
-      btm_ble_write_adv_enable_complete(p);
+      btm_ble_write_adv_enable_complete(p, evt_len);
       break;
 
     case HCI_BLE_CREATE_LL_CONN:
@@ -1238,6 +1256,11 @@ static void btu_hcif_hdl_command_complete(uint16_t opcode, uint8_t* p,
     case HCI_BLE_READ_RESOLVABLE_ADDR_LOCAL:
     case HCI_BLE_SET_ADDR_RESOLUTION_ENABLE:
     case HCI_BLE_SET_RAND_PRIV_ADDR_TIMOUT:
+      break;
+#endif
+#ifdef DIR_FINDING_FEATURE
+    case HCI_BLE_READ_ANTENNA_INFO:
+      btm_ble_read_antenna_info_complete(p, evt_len);
       break;
 #endif
     default:
@@ -1458,6 +1481,10 @@ static void btu_hcif_hdl_command_status(uint16_t opcode, uint8_t status,
         if ((opcode & HCI_GRP_VENDOR_SPECIFIC) == HCI_GRP_VENDOR_SPECIFIC)
           btm_vsc_complete(&status, opcode, 1,
                            (tBTM_VSC_CMPL_CB*)p_vsc_status_cback);
+#ifdef VLOC_FEATURE
+          btu_vendor_hcif_hdl_command_status(opcode, status,
+                                        p_cmd);
+#endif
       }
   }
 }
@@ -2037,6 +2064,11 @@ static void btu_ble_ll_conn_param_upd_evt(uint8_t* p, uint16_t evt_len) {
   uint16_t latency;
   uint16_t timeout;
 
+  if (evt_len < 9) {
+    LOG_ERROR(LOG_TAG, "Bogus event packet, too short");
+    return;
+  }
+
   STREAM_TO_UINT8(status, p);
   STREAM_TO_UINT16(handle, p);
   STREAM_TO_UINT16(interval, p);
@@ -2048,8 +2080,8 @@ static void btu_ble_ll_conn_param_upd_evt(uint8_t* p, uint16_t evt_len) {
   gatt_notify_conn_update(handle & 0x0FFF, interval, latency, timeout, status);
 }
 
-static void btu_ble_read_remote_feat_evt(uint8_t* p) {
-  btm_ble_read_remote_features_complete(p);
+static void btu_ble_read_remote_feat_evt(uint8_t* p, uint8_t length) {
+  btm_ble_read_remote_features_complete(p, length);
 }
 
 static void btu_ble_proc_ltk_req(uint8_t* p) {
@@ -2085,9 +2117,14 @@ static void btu_ble_data_length_change_evt(uint8_t* p, uint16_t evt_len) {
  * End of BLE Events Handler
  **********************************************/
 #if (BLE_LLT_INCLUDED == TRUE)
-static void btu_ble_rc_param_req_evt(uint8_t* p) {
+static void btu_ble_rc_param_req_evt(uint8_t* p, uint8_t len) {
   uint16_t handle;
   uint16_t int_min, int_max, latency, timeout;
+
+  if (len < 10) {
+    LOG(ERROR) << __func__ << "bogus event packet, too short";
+    return;
+  }
 
   STREAM_TO_UINT16(handle, p);
   STREAM_TO_UINT16(int_min, p);
@@ -2137,3 +2174,23 @@ void btm_ble_subrate_req_cmd_status(uint8_t status, uint16_t handle) {
   gatt_notify_subrate_change(handle & 0x0FFF, subrate_factor,
                              peripheral_latency, cont_num, timeout, status);
 }
+
+#ifdef DIR_FINDING_FEATURE
+static void btm_le_conn_iq_report_evt(uint8_t* p, uint16_t evt_len) {
+  uint16_t handle;
+  uint8_t* pp = p;
+  STREAM_TO_UINT16(handle, pp);
+
+  btm_ble_aoa_conn_iq_rpt_evt((handle & 0x0FFF), p, evt_len);
+}
+
+static void btm_le_cte_req_failed_evt(uint8_t* p, uint16_t evt_len) {
+  uint16_t handle;
+  uint8_t status;
+  LOG_DEBUG(LOG_TAG, "%s", __func__);
+
+  STREAM_TO_UINT8(status, p);
+  STREAM_TO_UINT16(handle, p);
+}
+#endif //DIR_FINDING_FEATURE
+

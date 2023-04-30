@@ -15,40 +15,6 @@
  *  limitations under the License.
  *
  *  Changes from Qualcomm Innovation Center are provided under the following license:
- *
- *  Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- *  Redistribution and use in source and binary forms, with or without
- *  modification, are permitted (subject to the limitations in the
- *  disclaimer below) provided that the following conditions are met:
- *
- *  Redistributions of source code must retain the above copyright
- *  notice, this list of conditions and the following disclaimer.
- *
- *  Redistributions in binary form must reproduce the above
- *  copyright notice, this list of conditions and the following
- *  disclaimer in the documentation and/or other materials provided
- *  with the distribution.
- *
- *  Neither the name of Qualcomm Innovation Center, Inc. nor the names of its
- *  contributors may be used to endorse or promote products derived
- *  from this software without specific prior written permission.
- *
- *  NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE
- *  GRANTED BY THIS LICENSE. THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT
- *  HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED
- *  WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
- *  MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- *  IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
- *  ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- *  DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
- *  GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- *  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
- *  IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
- *  OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
- *  IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE
- *
- *  Changes from Qualcomm Innovation Center are provided under the following license:
  *  Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *  SPDX-License-Identifier: BSD-3-Clause-Clear
  ******************************************************************************/
@@ -171,7 +137,6 @@ static void bta_dm_bond_cancel_complete_cback(tBTM_STATUS result);
 static bool bta_dm_read_remote_device_name(const RawAddress& bd_addr,
                                            tBT_TRANSPORT transport);
 static void bta_dm_discover_device(const RawAddress& remote_bd_addr);
-
 static void bta_dm_sys_hw_cback(tBTA_SYS_HW_EVT status);
 static void bta_dm_disable_search_and_disc(void);
 
@@ -183,6 +148,8 @@ static void bta_dm_gattc_register(void);
 static void btm_dm_start_gatt_discovery(const RawAddress& bd_addr);
 static void bta_dm_cancel_gatt_discovery(const RawAddress& bd_addr);
 static void bta_dm_gattc_callback(tBTA_GATTC_EVT event, tBTA_GATTC* p_data);
+static void bta_dm_le_gattc_callback(tBTA_GATTC_EVT event, tBTA_GATTC* p_data);
+
 
 extern tBTA_DM_CONTRL_STATE bta_dm_pm_obtain_controller_state(void);
 
@@ -350,6 +317,8 @@ extern DEV_CLASS local_device_default_class;
 
 // Stores the local Input/Output Capabilities of the Bluetooth device.
 static uint8_t btm_local_io_caps;
+
+tBTA_DM_LE_GATT_INFO bta_dm_le_gatt_cb;
 
 /** Initialises the BT device manager */
 void bta_dm_enable(tBTA_DM_MSG* p_data) {
@@ -1498,7 +1467,9 @@ void bta_dm_search_start(tBTA_DM_MSG* p_data) {
 
   APPL_TRACE_DEBUG("%s avoid_scatter=%d", __func__,
                    p_bta_dm_cfg->avoid_scatter);
-
+#ifdef ADV_AUDIO_FEATURE
+  bta_dm_reset_adv_audio_device_db();
+#endif
   if (p_bta_dm_cfg->avoid_scatter &&
       (p_data->search.rs_res == BTA_DM_RS_NONE) &&
       bta_dm_check_av(BTA_DM_API_SEARCH_EVT)) {
@@ -1586,6 +1557,7 @@ void bta_dm_search_cancel(UNUSED_ATTR tBTA_DM_MSG* p_data) {
  *
  ******************************************************************************/
 void bta_dm_discover(tBTA_DM_MSG* p_data) {
+  APPL_TRACE_EVENT("%s ", __func__);
   size_t len = sizeof(Uuid) * p_data->discover.num_uuid;
   APPL_TRACE_EVENT("%s services_to_search=0x%04X, sdp_search=%d", __func__,
                    p_data->discover.services, p_data->discover.sdp_search);
@@ -2641,9 +2613,9 @@ static void bta_dm_discover_next_device(void) {
  ******************************************************************************/
 static void bta_dm_discover_device(const RawAddress& remote_bd_addr) {
   tBT_TRANSPORT transport = BT_TRANSPORT_BR_EDR;
+  tBLE_ADDR_TYPE addr_type = BLE_ADDR_PUBLIC;
   if (bta_dm_search_cb.transport == BTA_TRANSPORT_UNKNOWN) {
     tBT_DEVICE_TYPE dev_type;
-    tBLE_ADDR_TYPE addr_type;
 
     BTM_ReadDevInfo(remote_bd_addr, &dev_type, &addr_type);
     if (dev_type == BT_DEVICE_TYPE_BLE || addr_type == BLE_ADDR_RANDOM)
@@ -2667,8 +2639,10 @@ static void bta_dm_discover_device(const RawAddress& remote_bd_addr) {
                      bta_dm_search_cb.p_btm_inq_info->appl_knows_rem_name);
   }
   if ((bta_dm_search_cb.p_btm_inq_info) &&
-      (bta_dm_search_cb.p_btm_inq_info->results.device_type ==
-       BT_DEVICE_TYPE_BLE) &&
+      ((bta_dm_search_cb.p_btm_inq_info->results.device_type ==
+        BT_DEVICE_TYPE_BLE)  || ((bta_dm_search_cb.p_btm_inq_info->results.device_type ==
+        BT_DEVICE_TYPE_DUMO) && (addr_type == BLE_ADDR_RANDOM)))
+        &&
       (bta_dm_search_cb.state == BTA_DM_SEARCH_ACTIVE)) {
     /* Do not perform RNR for LE devices at inquiry complete*/
     bta_dm_search_cb.name_discover_done = true;
@@ -2915,7 +2889,7 @@ static void bta_dm_rem_name_cback (const RawAddress& bd_addr, DEV_CLASS dc, BD_N
 static void bta_dm_service_search_remname_cback(const RawAddress& bd_addr,
                                                 UNUSED_ATTR DEV_CLASS dc,
                                                 BD_NAME bd_name) {
-  tBTM_REMOTE_DEV_NAME rem_name;
+  tBTM_REMOTE_DEV_NAME rem_name = {};
   tBTM_STATUS btm_status;
 
   APPL_TRACE_DEBUG("%s name=<%s>", __func__, bd_name);
@@ -2929,7 +2903,7 @@ static void bta_dm_service_search_remname_cback(const RawAddress& bd_addr,
     }
     strlcpy((char*)rem_name.remote_bd_name, (char*)bd_name, BD_NAME_LEN + 1);
     rem_name.status = BTM_SUCCESS;
-
+    rem_name.hci_status = HCI_SUCCESS;
     bta_dm_remname_cback(&rem_name);
   } else {
     /* get name of device */
@@ -2947,6 +2921,7 @@ static void bta_dm_service_search_remname_cback(const RawAddress& bd_addr,
       rem_name.length = 0;
       rem_name.remote_bd_name[0] = 0;
       rem_name.status = btm_status;
+      rem_name.hci_status = HCI_SUCCESS;
       bta_dm_remname_cback(&rem_name);
     }
   }
@@ -2967,18 +2942,31 @@ static void bta_dm_remname_cback(void* p) {
                    p_remote_name->length, p_remote_name->remote_bd_name);
 
   if ((p_remote_name->bd_addr != RawAddress::kEmpty) &&
-      (p_remote_name->bd_addr != bta_dm_search_cb.peer_bdaddr)) {
-    VLOG(1) << "bta_dm_remname_cback ,rnr complete for diff device,return"
-    << " search_cb.peer_dbaddr:" << bta_dm_search_cb.peer_bdaddr
-    << " p_remote_name_bda=" << p_remote_name->bd_addr;
-    return;
+      (p_remote_name->bd_addr == bta_dm_search_cb.peer_bdaddr)) {
+    BTM_SecDeleteRmtNameNotifyCallback(&bta_dm_service_search_remname_cback);
+  } else {
+    VLOG(1) << "bta_dm_remname_cback ,rnr complete for diff device,return";
+    // if we got a different response, maybe ignore it
+    // we will have made a request directly from BTM_ReadRemoteDeviceName so we
+    // expect a dedicated response for us
+    if (p_remote_name->hci_status == HCI_ERR_CONNECTION_EXISTS) {
+      BTM_SecDeleteRmtNameNotifyCallback(
+          &bta_dm_service_search_remname_cback);
+      VLOG(1) << "Assume command failed due to disconnection hci_status:"
+      << p_remote_name->hci_status
+      << " p_remote_name_bda=" << p_remote_name->bd_addr;
+    } else {
+      VLOG(1) << "Ignored remote name response for the wrong address exp:"
+      << " search_cb.peer_dbaddr:" << bta_dm_search_cb.peer_bdaddr
+      << " act: p_remote_name_bda=" << p_remote_name->bd_addr;
+      return;
+    }
   }
+
   /* remote name discovery is done but it could be failed */
   bta_dm_search_cb.name_discover_done = true;
   strlcpy((char*)bta_dm_search_cb.peer_name,
           (char*)p_remote_name->remote_bd_name, BD_NAME_LEN + 1);
-
-  BTM_SecDeleteRmtNameNotifyCallback(&bta_dm_service_search_remname_cback);
 
   if (bta_dm_search_cb.transport == BT_TRANSPORT_LE) {
     GAP_BleReadPeerPrefConnParams(bta_dm_search_cb.peer_bdaddr);
@@ -5383,6 +5371,9 @@ void bta_dm_ble_config_local_privacy(tBTA_DM_MSG* p_data) {
 void bta_dm_ble_observe(tBTA_DM_MSG* p_data) {
   tBTM_STATUS status;
   if (p_data->ble_observe.start) {
+#ifdef ADV_AUDIO_FEATURE
+    bta_dm_reset_adv_audio_device_db();
+#endif
     /*Save the  callback to be called when a scan results are available */
     bta_dm_search_cb.p_scan_cback = p_data->ble_observe.p_cback;
     status = BTM_BleObserve(true, p_data->ble_observe.duration,
@@ -5705,8 +5696,20 @@ void btm_dm_start_gatt_discovery(const RawAddress& bd_addr) {
     btm_dm_start_disc_gatt_services(bta_dm_search_cb.conn_id);
   } else {
     if (BTM_IsAclConnectionUp(bd_addr, BT_TRANSPORT_LE)) {
+#ifdef ADV_AUDIO_FEATURE
+      if (is_remote_support_adv_audio(bd_addr)) {
+        APPL_TRACE_DEBUG("%s ADV_AUDIO_DEVICE ", __func__);
+        BTA_GATTC_Open(bta_dm_search_cb.client_if, bd_addr, true,
+            GATT_TRANSPORT_LE, true);
+      } else {
+        APPL_TRACE_DEBUG("%s LEGACY LE DEVICE ", __func__);
+        BTA_GATTC_Open(bta_dm_search_cb.client_if, bd_addr, true,
+            GATT_TRANSPORT_LE, false);
+      }
+#else
       BTA_GATTC_Open(bta_dm_search_cb.client_if, bd_addr, true,
-                     GATT_TRANSPORT_LE, true);
+                     GATT_TRANSPORT_LE, false);
+#endif
     } else {
       //TODO review. Kept qcom Specific change only.
       APPL_TRACE_DEBUG("btm_dm_start_gatt_discovery: ACL is disconnected");
@@ -5927,4 +5930,114 @@ void bta_dm_ble_subrate_request(tBTA_DM_MSG* p_data) {
   }
 }
 
+void bta_dm_le_gatt_open_evt(tBTA_GATTC_OPEN* p_data) {
+  VLOG(1) << "bta_dm_le_gatt_open_evt peer_dbaddr:"
+          << bta_dm_le_gatt_cb.peer_address
+          << " connected_bda=" << p_data->remote_bda;
 
+  if (p_data->status == GATT_SUCCESS) {
+    btm_dm_start_disc_gatt_services(p_data->conn_id);
+  } else {
+    bta_dm_gatt_disc_complete(GATT_INVALID_CONN_ID, p_data->status);
+  }
+}
+
+static void bta_dm_le_gattc_callback(tBTA_GATTC_EVT event, tBTA_GATTC* p_data) {
+  APPL_TRACE_DEBUG(" bta_dm_le_gattc_callback event = %d", event);
+
+  switch (event) {
+    case BTA_GATTC_OPEN_EVT:
+      APPL_TRACE_DEBUG(" bta_dm_le_gattc_callback BTA_GATTC_OPEN_EVT");
+      bta_dm_le_gatt_cb.disc_progress = false;
+      bta_dm_le_gatt_open_evt(&p_data->open);
+      break;
+
+    case BTA_GATTC_SEARCH_RES_EVT:
+#ifdef ADV_AUDIO_FEATURE
+      if (!bta_dm_le_gatt_cb.is_lea_device) {
+        if (is_le_audio_service(p_data->srvc_res.service_uuid.uuid)) {
+          APPL_TRACE_DEBUG(" bta_dm_le_gattc_callback LE AUDIO UUID");
+          bta_dm_le_gatt_cb.is_lea_device = true;
+          //This remote supports LE AUDIO. So reuse LE AUDIO API's to derive role
+          btif_store_adv_audio_pair_info(bta_dm_le_gatt_cb.peer_address);
+          bta_dm_update_adv_audio_db(bta_dm_le_gatt_cb.peer_address);
+        }
+      }
+#endif
+      break;
+
+    case BTA_GATTC_SEARCH_CMPL_EVT:
+        APPL_TRACE_DEBUG(" bta_dm_le_gattc_callback BTA_GATTC_SEARCH_CMPL_EVT");
+#ifdef ADV_AUDIO_FEATURE
+      if (bta_dm_le_gatt_cb.is_lea_device && !bta_dm_le_gatt_cb.disc_progress) {
+        APPL_TRACE_DEBUG(" bta_dm_le_gattc_callback LE AUDIO ROLE DISC");
+        //This remote supports LE AUDIO. So reuse LE AUDIO API's to derive role
+        tBTA_GATTC_OPEN p_tmp_data;
+        p_tmp_data.remote_bda = bta_dm_le_gatt_cb.peer_address;
+        p_tmp_data.conn_id = p_data->search_cmpl.conn_id;
+        p_tmp_data.transport = BT_TRANSPORT_LE;
+        bta_dm_le_gatt_cb.disc_progress = true;
+        bta_dm_set_adv_audio_dev_info(&p_tmp_data);
+        bta_adv_audio_update_bond_db(bta_dm_le_gatt_cb.peer_address, GATT_TRANSPORT_LE);
+
+        if (p_data->search_cmpl.status == 0) {
+          bta_get_adv_audio_role(bta_dm_le_gatt_cb.peer_address,
+              p_data->search_cmpl.conn_id,
+              p_data->search_cmpl.status);
+          if (is_adv_audio_group_supported(bta_dm_le_gatt_cb.peer_address,
+                p_data->search_cmpl.conn_id)) {
+            bta_find_adv_audio_group_instance(p_data->search_cmpl.conn_id,
+                p_data->search_cmpl.status, bta_dm_le_gatt_cb.peer_address);
+          }
+        } else {
+          APPL_TRACE_DEBUG("%s Discovery Failure ", __func__);
+          bta_le_audio_service_search_failed(&bta_dm_le_gatt_cb.peer_address);
+        }
+      }
+#endif
+      break;
+
+    case BTA_GATTC_CLOSE_EVT:
+      APPL_TRACE_ERROR(" BTA_GATTC_CLOSE_EVT reason = %d,"
+        "p_data conn_id %d, search conn_id %d", p_data->close.reason,
+        p_data->close.conn_id,bta_dm_search_cb.conn_id);
+        BTA_GATTC_AppDeregister(bta_dm_le_gatt_cb.gatt_if);
+        bta_dm_le_gatt_cb.gatt_if = GATT_INVALID_CONN_ID;
+        bta_dm_le_gatt_cb.is_lea_device = false;
+        bta_dm_le_gatt_cb.disc_progress = false;
+        bta_dm_le_gatt_cb.peer_address = RawAddress::kEmpty;
+
+#ifdef ADV_AUDIO_FEATURE
+      if (is_remote_support_adv_audio(p_data->close.remote_bda)) {
+        bta_dm_reset_adv_audio_dev_info(p_data->close.remote_bda);
+      }
+#endif
+      break;
+    default:
+      break;
+  }
+}
+
+void bta_dm_gatt_le_services(RawAddress bd_addr) {
+  APPL_TRACE_WARNING(" bta_dm_gatt_le_services");
+
+  if (bta_dm_le_gatt_cb.disc_progress) {
+    APPL_TRACE_ERROR("Already dm le discovery in progress. Ignore it");
+    return;
+  }
+  bta_dm_le_gatt_cb.peer_address = bd_addr;
+
+  BTA_GATTC_AppRegister(bta_dm_le_gattc_callback,
+      base::Bind([](uint8_t client_id, uint8_t status) {
+        if (status == GATT_SUCCESS) {
+
+          APPL_TRACE_DEBUG("bta_dm_gatt_le_services Client Id: %d",
+              client_id);
+          bta_dm_le_gatt_cb.gatt_if = client_id;
+          bta_dm_le_gatt_cb.disc_progress = true;
+          BTA_GATTC_Open(client_id, bta_dm_le_gatt_cb.peer_address,
+                  true, GATT_TRANSPORT_LE, false);
+        }
+        }), false);
+
+}

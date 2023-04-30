@@ -1568,8 +1568,8 @@ void bta_av_conn_chg(tBTA_AV_DATA* p_data) {
             APPL_TRACE_DEBUG("%s: new rc_acp_handle:%d, idx:%d", __func__,
                              p_cb->rc_acp_handle, p_cb->rc_acp_idx);
             p_rcb2->lidx = (BTA_AV_NUM_LINKS + 1);
-            APPL_TRACE_DEBUG("%s: rc2 handle:%d lidx:%d/%d", p_rcb2->handle,
-                             __func__, p_rcb2->lidx, p_cb->lcb[p_rcb2->lidx - 1].lidx);
+            APPL_TRACE_DEBUG("%s: rc2 handle:%d lidx:%d/%d", __func__,
+                             p_rcb2->handle, p_rcb2->lidx, p_cb->lcb[p_rcb2->lidx - 1].lidx);
           } else {
             /* clear RC ACP handle when rc is opened on the RC only ACP channel */
             APPL_TRACE_DEBUG("%s: clear rc ACP handle", __func__);
@@ -2384,16 +2384,20 @@ void bta_av_rc_disc_done(UNUSED_ATTR tBTA_AV_DATA* p_data) {
             p_cb->rcb[rc_handle].peer_features = peer_features;
             p_cb->rcb[rc_handle].cover_art_psm = cover_art_psm;
           } else {
-            /* cannot create valid rc_handle for current device */
-            APPL_TRACE_ERROR(" No link resources available");
-            p_scb->use_rc = FALSE;
+            /* Cannot create valid rc_handle for current device. Report failure*/
+            APPL_TRACE_ERROR("%s: No link resources available", __func__);
+            p_scb->use_rc = false;
+            tBTA_AV_RC_OPEN rc_open;
             rc_open.peer_addr = p_scb->peer_addr;
             rc_open.peer_features = 0;
+            rc_open.cover_art_psm = 0;
             rc_open.status = BTA_AV_FAIL_RESOURCES;
-            (*p_cb->p_cback)(BTA_AV_RC_OPEN_EVT, (tBTA_AV *) &rc_open);
+            tBTA_AV bta_av_data;
+            bta_av_data.rc_open = rc_open;
+            (*p_cb->p_cback)(BTA_AV_RC_OPEN_EVT, &bta_av_data);
           }
         } else {
-          APPL_TRACE_ERROR("can not find LCB!!");
+          APPL_TRACE_ERROR("%s: can not find LCB!!", __func__);
         }
       } else if (p_scb->use_rc) {
         /* can not find AVRC on peer device. report failure */

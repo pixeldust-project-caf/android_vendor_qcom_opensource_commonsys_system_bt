@@ -16,6 +16,14 @@
  *
  ******************************************************************************/
 
+/******************************************************************************
+ *
+ * Changes from Qualcomm Innovation Center are provided under the following license:
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause-Clear
+ *
+*****************************************************************************/
+
 #define LOG_TAG "bt_osi_config"
 
 #include "osi/include/config.h"
@@ -39,16 +47,6 @@
 #include "log/log.h"
 #include "bt_target.h"
 #include <inttypes.h>
-
-typedef struct {
-  char* key;
-  char* value;
-} entry_t;
-
-typedef struct {
-  char* name;
-  list_t* entries;
-} section_t;
 
 struct config_t {
   list_t* sections;
@@ -360,6 +358,34 @@ const char* config_section_name(const config_section_node_t* node) {
   const list_node_t* lnode = (const list_node_t*)node;
   const section_t* section = (const section_t*)list_node(lnode);
   return section->name;
+}
+
+section_t* config_section(const config_section_node_t* node) {
+  CHECK(node != NULL);
+  const list_node_t* lnode = (const list_node_t*)node;
+  section_t* section = (section_t*)list_node(lnode);
+  return section;
+}
+
+bool config_remove_section_optimal(config_t* config,section_t* section) {
+  CHECK(config != NULL);
+  CHECK(section != NULL);
+
+  return list_remove(config->sections, section);
+}
+
+bool section_has_key(const section_t* section,
+                    const char* key) {
+  CHECK(section != NULL);
+  CHECK(key != NULL);
+
+  for (const list_node_t* node = list_begin(section->entries);
+       node != list_end(section->entries); node = list_next(node)) {
+    entry_t* entry = static_cast<entry_t*>(list_node(node));
+    if (!strcmp(entry->key, key)) return true;
+  }
+
+  return false;
 }
 
 #if (BT_IOT_LOGGING_ENABLED == TRUE)

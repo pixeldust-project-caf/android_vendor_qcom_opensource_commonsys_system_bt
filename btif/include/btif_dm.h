@@ -117,11 +117,15 @@ void btif_vendor_update_whitelisted_media_players();
 bool fetch_whitelisted_media_players(list_t** bl_devices);
 
 void btif_get_pairing_cb_info(bt_bond_state_t* state, uint8_t* sdp_attempts,
-                             RawAddress* bd_addr, RawAddress* static_bdaddr);
+                             RawAddress* bd_addr, RawAddress* static_bdaddr,
+                             RawAddress* lea_bd_addr);
 
 void btif_inc_sdp_attempts();
 void btif_reset_pairing_cb() ;
 void btif_reset_sdp_attempts();
 int btif_dm_is_adv_audio();
-
+void btif_dm_get_le_services(RawAddress *bd_addr, int transport);
+#ifdef ADV_AUDIO_FEATURE
+void btif_store_adv_audio_pair_info(RawAddress bd_addr);
+#endif
 #endif

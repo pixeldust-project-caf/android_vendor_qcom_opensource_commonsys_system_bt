@@ -339,7 +339,7 @@ uint8_t* avdt_scb_hdl_report(tAVDT_SCB* p_scb, uint8_t* p, uint16_t len) {
   uint8_t* p_start = p;
   uint32_t ssrc;
   uint8_t o_v, o_p, o_cc;
-  uint16_t min_len = 0;
+  uint32_t min_len = 0;
   AVDT_REPORT_TYPE pt;
   tAVDT_REPORT_DATA report;
 
@@ -1239,6 +1239,10 @@ void avdt_scb_hdl_write_req(tAVDT_SCB* p_scb, tAVDT_SCB_EVT* p_data) {
   /* Build a media packet, and add an RTP header if required. */
   if (add_rtp_header) {
     AVDT_TRACE_DEBUG("%s:add rtp header",__func__);
+    if (p_data->apiwrite.p_buf->offset < AVDT_MEDIA_HDR_SIZE) {
+      android_errorWriteWithInfoLog(0x534e4554, "242535997", -1, NULL, 0);
+      return;
+    }
     ssrc = avdt_scb_gen_ssrc(p_scb);
 
     p_data->apiwrite.p_buf->len += AVDT_MEDIA_HDR_SIZE;

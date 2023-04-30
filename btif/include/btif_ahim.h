@@ -139,6 +139,8 @@ typedef uint32_t (* ahim_get_audio_location)(uint32_t stream_id, uint8_t directi
 typedef void (* ahim_update_src_metadata)(const source_metadata_t& source_metadata);
 typedef void (* ahim_update_snk_metadata)(const sink_metadata_t& sink_metadata);
 typedef uint32_t (* ahim_get_mode_callback)();
+typedef uint16_t (* ahim_get_frame_duration)(uint8_t direction);
+typedef void (* ahim_update_params)(uint16_t delay, uint8_t mode);
 
 typedef struct {
     uint8_t mode;
@@ -158,6 +160,8 @@ typedef struct {
     ahim_update_src_metadata src_meta_update;
     ahim_update_snk_metadata snk_meta_update;
     ahim_get_mode_callback get_mode_cb;
+    ahim_get_frame_duration get_frame_duration;
+    ahim_update_params params_update;
 }btif_ahim_client_callbacks_t;
 
 extern btif_ahim_client_callbacks_t* pclient_cbs[MAX_CLIENT];
@@ -188,6 +192,10 @@ bool btif_ahim_is_restart_session_needed(uint8_t profile);
 
 void btif_ahim_update_session_params(SessionParamType param_type);
 
+void btif_ahim_update_audio_config();
+
+uint16_t btif_ahim_get_remote_delay();
+
 bool btif_ahim_setup_codec(uint8_t profile);
 
 void btif_ahim_start_session(uint8_t profile);
@@ -200,6 +208,8 @@ tA2DP_CTRL_CMD btif_ahim_get_pending_command(uint8_t profile,
                                                           uint8_t direction);
 
 void btif_ahim_reset_pending_command(uint8_t profile);
+
+void btif_ahim_update_params (uint16_t delay, uint8_t mode);
 
 void btif_ahim_reset_pending_command(uint8_t profile, uint8_t direction);
 

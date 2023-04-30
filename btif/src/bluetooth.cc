@@ -41,6 +41,9 @@
 #include <hardware/bt_hf.h>
 #include <hardware/bt_hearing_aid.h>
 #include <hardware/bt_hf_client.h>
+#ifdef DIR_FINDING_FEATURE
+#include <hardware/bt_atp_locator.h>
+#endif
 #include <hardware/bt_hh.h>
 #include <hardware/bt_pan.h>
 #include <hardware/bt_rc_ext.h>
@@ -87,6 +90,9 @@
 
 using base::Bind;
 using bluetooth::hearing_aid::HearingAidInterface;
+#ifdef DIR_FINDING_FEATURE
+using bluetooth::atp_locator::AtpLocatorInterface;
+#endif
 
 /*******************************************************************************
  *  Static variables
@@ -141,6 +147,10 @@ extern btvendor_interface_t *btif_vendor_hf_get_interface();
 /* broadcast transmitter */
 extern ba_transmitter_interface_t *btif_bat_get_interface();
 extern btrc_vendor_ctrl_interface_t *btif_rc_vendor_ctrl_get_interface();
+
+#ifdef DIR_FINDING_FEATURE
+extern AtpLocatorInterface* btif_atp_locator_get_interface();
+#endif
 
 /*******************************************************************************
  *  Functions
@@ -356,10 +366,12 @@ static int get_connection_state(const RawAddress* bd_addr) {
 
 static int pin_reply(const RawAddress* bd_addr, uint8_t accept, uint8_t pin_len,
                      bt_pin_code_t* pin_code) {
+  bt_pin_code_t tmp_pin_code;
   /* sanity check */
   if (interface_ready() == false) return BT_STATUS_NOT_READY;
 
-  return btif_dm_pin_reply(bd_addr, accept, pin_len, pin_code);
+  memcpy(&tmp_pin_code, pin_code, pin_len);
+  return btif_dm_pin_reply(bd_addr, accept, pin_len, &tmp_pin_code);
 }
 
 static int ssp_reply(const RawAddress* bd_addr, bt_ssp_variant_t variant,
@@ -469,6 +481,11 @@ static const void* get_profile_interface(const char* profile_id) {
   if (is_profile(profile_id, BT_PROFILE_HEARING_AID_ID))
     return btif_hearing_aid_get_interface();
 
+#ifdef DIR_FINDING_FEATURE
+  if (is_profile(profile_id, BT_PROFILE_ATP_LOCATOR_ID))
+    return btif_atp_locator_get_interface();
+#endif
+
   if (is_profile(profile_id, BT_KEYSTORE_ID))
     return bluetooth::bluetooth_keystore::getBluetoothKeystoreInterface();
   return get_external_profile_interface(profile_id);
@@ -540,6 +557,10 @@ static bool allow_low_latency_audio(bool allowed, const RawAddress& address) {
   return false;
 }
 
+static void metadata_changed(const RawAddress& remote_bd_addr, int key,
+                             std::vector<uint8_t> value) {
+}
+
 EXPORT_SYMBOL bt_interface_t bluetoothInterface = {
     sizeof(bluetoothInterface),
     init,
@@ -581,6 +602,7 @@ EXPORT_SYMBOL bt_interface_t bluetoothInterface = {
     generate_local_oob_data,
     allow_low_latency_audio,
     clear_event_filter,
+    metadata_changed,
 };
 
 void invoke_oob_data_request_cb(tBT_TRANSPORT t, bool valid, Octet16 c,
