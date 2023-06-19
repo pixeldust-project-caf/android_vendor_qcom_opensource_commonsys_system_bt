@@ -721,23 +721,6 @@ static void gatt_le_connect_cback(uint16_t chan, const RawAddress& bd_addr,
     }
   }
 
-  if (gatt_is_robust_caching_enabled()) {
-    bool skip_caching_enable = false;
-    BD_NAME bd_name;
-    VLOG(1) << StringPrintf("[%s] BTM_GetRemoteDeviceName: %s", __func__, bd_addr.ToString().c_str());
-    if (BTM_GetRemoteDeviceName(bd_addr, bd_name)) {
-      VLOG(1) << StringPrintf("[%s] FileDB Device name: %s", __func__, bd_name);
-      if (interop_database_match_name(INTEROP_SKIP_ROBUST_CACHING_READ, (char*) bd_name)) {
-        VLOG(1) << StringPrintf("[%s] Skip GATT_EnableRobustCaching", __func__);
-        skip_caching_enable = true;
-      }
-    }
-    VLOG(1) << StringPrintf("[%s] skip_caching_enable: %d", __func__, skip_caching_enable);
-    if (!skip_caching_enable) {
-      GATT_EnableRobustCaching(bd_addr, BT_TRANSPORT_LE);
-    }
-  }
-
 }
 
 /** This function is called to process the congestion callback from lcb */
@@ -1380,11 +1363,16 @@ static void gatt_l2cif_eatt_connect_cfm_cback(RawAddress &p_bd_addr,
       return;
     }
 
+    VLOG(1) << __func__ << " is_eatt_supported:" << +p_tcb->is_eatt_supported;
     if (result == L2CAP_ECFC_ALL_CONNS_REFUSED_INSUFF_AUTHENTICATION) {
       VLOG(1) << " EATT connection rejected due to insufficient authentication,"
                  " Set eatt as not supported";
       gatt_eatt_bcb_in_progress_dealloc(p_bd_addr);
       p_tcb->apps_needing_eatt.clear();
+      if (p_tcb->is_eatt_supported) {
+        gatt_move_att_ops_from_eatt_bcb(p_tcb);
+      }
+      gatt_eatt_bcb_dealloc(p_tcb, L2CAP_ATT_CID);
       p_tcb->is_eatt_supported = false;
 
       gatt_send_conn_cb_after_enc_failure(p_tcb);
@@ -1395,9 +1383,12 @@ static void gatt_l2cif_eatt_connect_cfm_cback(RawAddress &p_bd_addr,
     if (!p_tcb->apps_needing_eatt.empty()) {
       gatt_if = p_tcb->apps_needing_eatt.front();
       p_tcb->apps_needing_eatt.pop_front();
-      p_eatt_bcb = gatt_find_best_eatt_bcb(p_tcb, gatt_if, 0, false);
+      if (p_tcb->is_eatt_supported) {
+        VLOG(1) << " EATT is supported, finding best EATT channel";
+        p_eatt_bcb = gatt_find_best_eatt_bcb(p_tcb, gatt_if, 0, false);
+      }
 
-      if (p_eatt_bcb) {
+      if (p_eatt_bcb || !p_tcb->is_eatt_supported) {
         for (int i = 0; i < GATT_MAX_APPS; i++) {
           tGATT_REG* p_reg = &gatt_cb.cl_rcb[i];
 
@@ -1415,8 +1406,10 @@ static void gatt_l2cif_eatt_connect_cfm_cback(RawAddress &p_bd_addr,
     }
     gatt_eatt_bcb_in_progress_dealloc(p_bd_addr);
 
-    if (gatt_num_eatt_bcbs(p_tcb) == 0) {
+    if ((gatt_num_eatt_bcbs(p_tcb) == 0) && p_tcb->is_eatt_supported) {
       VLOG(1) << " First EATT conn attempt rejected, set eatt as not supported";
+      gatt_move_att_ops_from_eatt_bcb(p_tcb);
+      gatt_eatt_bcb_dealloc(p_tcb, L2CAP_ATT_CID);
       p_tcb->is_eatt_supported = false;
     }
   }
@@ -1731,7 +1724,8 @@ void gatt_data_process(tGATT_TCB& tcb, uint16_t lcid, BT_HDR* p_buf) {
   STREAM_TO_UINT8(op_code, p);
 
   LOG(INFO) << __func__ << " op_code = " << +op_code
-                        << ", msg_len = " << +msg_len;
+                        << ", msg_len = " << +msg_len
+                        << ", lcid = " << +lcid;
 
   /* remove the two MSBs associated with sign write and write cmd */
   pseudo_op_code = op_code & (~GATT_WRITE_CMD_MASK);
